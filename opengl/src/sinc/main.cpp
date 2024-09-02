@@ -2,13 +2,12 @@
 #include <cmath>
 #define _USE_MATH_DEFINES
 #include <cmath>
-#define GLEW_STATIC
-#include <GL/glew.h>
-#include <GLFW/glfw3.h>
-#include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
-#include <glm/gtc/type_ptr.hpp>
+
 #include <vector>
+#include "definitions.h"
+#include "estrela.h"
+#include "rectangle.h"
+#include "lines.h"
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 // VÈrtices do pent·gono
@@ -52,37 +51,45 @@ const GLchar* fragmentShaderSrc =
 "    frag_color = vert_color;"
 "}";
 
-struct Line {
-	glm::vec3 position;
-	glm::vec4 color;
+struct Triangle {
+	GLuint vao;
+	GLuint ebo;
+	GLuint vbo;
+	GLfloat vertices[21];
+	GLuint* indices;
 };
 
-struct Lines {
-	std::vector<Line> lines;
-} lines;
-
+struct Square {
+	GLuint vao;
+	GLuint ebo;
+	GLuint vbo;
+	GLfloat vertices[28];
+	GLuint indices[8];
+};
 
 bool initOpenGL();
 
-void DrawStar(GLint modelLoc, glm::mat4& model, GLint projLoc, glm::mat4& projection, GLint viewLoc, glm::mat4& view, GLuint vao, GLuint ebo);
+void DrawStar(UniformLocation uniform, Transformation transformation, Star star);
+
+//void getUniformMatrixes(UniformLocation uniform, Transformation transformation);
 
 void DrawInvertedTriangle(GLint modelLoc, GLint projLoc, glm::mat4& projection, GLint viewLoc, glm::mat4& view, GLuint invertedTriangleVAO, GLuint squareVAO);
 
-void DrawRedLines(GLint modelLoc, GLuint lineVAO, int currentLineIndex);
+void DrawInvertedTriangle(UniformLocation uniform, Transformation transformation, GLuint invertedTriangleVAO, GLuint squareVAO);
 
 void clear(GLuint& vao, GLuint& vbo, GLuint& ebo, GLuint& lineVAO, GLuint& lineVBO, GLuint shaderProgram);
 
 void RotateStar(bool rotatingForward, glm::mat4& rotationMatrix, float currentRotationAngle, glm::mat4& translationMatrix, float backTranslation);
 
-void JumpStar(bool& jumping, float elapsedTime, float jumpDuration, int numJumps, float& startTime, float currentTime, float jumpHeight, glm::mat4& model);
+void JumpStar(bool& jumping, float elapsedTime, float jumpDuration, int numJumps, float& startTime, float currentTime, float jumpHeight, Transformation& transformation);
 
 void DrawRotatingStar(bool& finishedRotation, float elapsedTime, float rotationDuration, bool& rotatingForward, float rightRotationAngle, float leftRotationAngle, float& startTime, float currentTime, int currentLineIndex, bool& jumping, float translationSpeed, glm::mat4& model);
 
 void DisplayInvertedTriangle(bool finishedRotation, bool& displayingInvertedTriangle, float& displayStartTime, float currentTime);
 
-void generateLines(GLuint& lineVAO, GLuint& lineVBO);
-
 void DrawRectangles(GLint modelLoc, glm::mat4& model, GLint projLoc, glm::mat4& projection, GLint viewLoc, glm::mat4& view, GLuint rectangleVAO);
+
+void DrawRectangles(UniformLocation uniform, Transformation transformation, Rectangle rectangle);
 
 void DrawHexagon(GLint modelLoc, glm::mat4& model, GLint projLoc, glm::mat4& projection, GLint viewLoc, glm::mat4& view, GLuint hexagonVAO, GLuint hexagonEBO);
 
@@ -125,56 +132,10 @@ int main(void)
 	}
 
 	glfwSetFramebufferSizeCallback(gWindow, framebuffer_size_callback);
+	Star star = initStar();
+	Square square;
+	Lines lines = initLines();
 
-	// Calcula os v√©rtices do pentagrama
-	const int numPoints = 5;
-	const float angle = 2.0f * M_PI / numPoints;
-	GLfloat vertices[10 * 7]; // Cada ponto tem 7 valores (posi√ß√£o e cor com alpha)
-	float scale = 0.2f;  // Aumentado para melhorar a visibilidade
-	float offsetAngle = M_PI / 2.0f; // Ajuste para alinhar as pernas
-
-	// Gera os pontos do pentagrama
-	// Gera os pontos do pentagrama
-	for (int i = 0; i < numPoints; ++i)
-	{
-		float theta = i * angle + offsetAngle;
-		vertices[i * 7] = scale * cos(theta);
-		vertices[i * 7 + 1] = scale * sin(theta);
-		vertices[i * 7 + 2] = 1.0f;
-		vertices[i * 7 + 3] = 1.0f;  // Cor R
-		vertices[i * 7 + 4] = 1.0f;  // Cor G
-		vertices[i * 7 + 5] = 0.0f;  // Cor B (Ajustado para amarelo)
-		vertices[i * 7 + 6] = 1.0f;  // Alpha
-	}
-
-	GLuint indices[10]; // 10 √≠ndices para 5 linhas
-	for (int i = 0; i < numPoints; ++i)
-	{
-		indices[i * 2] = i;
-		indices[i * 2 + 1] = (i + 2) % numPoints;
-	}
-
-	GLuint vbo, vao, ebo;
-	glGenBuffers(1, &vbo);
-
-	// destaca
-	glBindBuffer(GL_ARRAY_BUFFER, vbo);
-	glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_DYNAMIC_DRAW);
-
-	glGenBuffers(1, &ebo);
-	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
-	glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_DYNAMIC_DRAW);
-
-	glGenVertexArrays(1, &vao);
-	glBindVertexArray(vao);
-
-	glBindBuffer(GL_ARRAY_BUFFER, vbo);
-	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 7 * sizeof(GLfloat), (GLvoid*)0);
-	glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, 7 * sizeof(GLfloat), (GLvoid*)(3 * sizeof(GLfloat)));
-	glEnableVertexAttribArray(0);
-
-	glEnableVertexAttribArray(1);
-	// Defini√ß√£o dos v√©rtices do quadrado
 	GLfloat squareVertices[] = {
 		// Posi√ß√£o         // Cor
 		-0.15f, -0.1f, 0.0f, 1.0f, 1.0f, 0.0f, 1.0f, // Inferior esquerdo
@@ -183,21 +144,33 @@ int main(void)
 		-0.15f, 0.1f, 0.0f, 1.0f, 1.0f, 0.0f, 1.0f   // Superior esquerdo
 	};
 
+
+	for (int i = 0; i < (sizeof(squareVertices) / sizeof(GLfloat)); i++)
+	{
+		square.vertices[i] = squareVertices[i];
+	}
+
 	// √çndices para desenhar o quadrado
 	GLuint squareIndices[] = {
 		0, 1, 1, 2, 2, 3, 3, 0
 	};
 
+	for (int i = 0; i < (sizeof(squareIndices) / sizeof(GLuint)); i++)
+	{
+		square.indices[i] = squareIndices[i];
+	}
+
 	// Configura o VAO e VBO para o quadrado
-	GLuint squareVAO, squareVBO, squareEBO;
-	glGenVertexArrays(1, &squareVAO);
-	glGenBuffers(1, &squareVBO);
-	glGenBuffers(1, &squareEBO);
-	glBindVertexArray(squareVAO);
-	glBindBuffer(GL_ARRAY_BUFFER, squareVBO);
-	glBufferData(GL_ARRAY_BUFFER, sizeof(squareVertices), squareVertices, GL_STATIC_DRAW);
-	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, squareEBO);
-	glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(squareIndices), squareIndices, GL_STATIC_DRAW);
+	GLuint squareVAO, squareEBO;
+
+	glGenVertexArrays(1, &square.vao);
+	glBindVertexArray(square.vao);
+	glGenBuffers(1, &square.vbo);
+	glBindBuffer(GL_ARRAY_BUFFER, square.vbo);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(square.vertices), square.vertices, GL_STATIC_DRAW);
+	glGenBuffers(1, &square.ebo);
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, square.ebo);
+	glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(square.indices), square.indices, GL_STATIC_DRAW);
 	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 7 * sizeof(GLfloat), (GLvoid*)0);
 	glEnableVertexAttribArray(0);
 	glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, 7 * sizeof(GLfloat), (GLvoid*)(3 * sizeof(GLfloat)));
@@ -206,8 +179,8 @@ int main(void)
 	glBindVertexArray(0);
 
 	// Defini√ß√£o dos v√©rtices para linhas verticais
-	
 
+	Triangle triangle;
 	// Defini√ß√£o dos v√©rtices do tri√¢ngulo invertido
 	GLfloat invertedTriangleVertices[] = {
 		// Posi√ß√£o          // Cor
@@ -216,82 +189,27 @@ int main(void)
 		0.125f, 0.1f, 0.0f, 1.0f, 0.0f, 1.0f, 1.0f  // V√©rtice superior direito
 	};
 
+	for (int i = 0; i < (sizeof(invertedTriangleVertices) / sizeof(GLfloat)); i++)
+	{
+		triangle.vertices[i] = invertedTriangleVertices[i];
+	}
+
+
 	GLuint invertedTriangleVAO, invertedTriangleVBO;
-	glGenVertexArrays(1, &invertedTriangleVAO);
-	glGenBuffers(1, &invertedTriangleVBO);
-	glBindVertexArray(invertedTriangleVAO);
-	glBindBuffer(GL_ARRAY_BUFFER, invertedTriangleVBO);
-	glBufferData(GL_ARRAY_BUFFER, sizeof(invertedTriangleVertices), invertedTriangleVertices, GL_STATIC_DRAW);
+	glGenVertexArrays(1, &triangle.vao);
+	glGenBuffers(1, &triangle.vbo);
+	glBindVertexArray(triangle.vao);
+	glBindBuffer(GL_ARRAY_BUFFER, triangle.vbo);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(triangle.vertices), triangle.vertices, GL_STATIC_DRAW);
 	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 7 * sizeof(GLfloat), (GLvoid*)0);
 	glEnableVertexAttribArray(0);
 	glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, 7 * sizeof(GLfloat), (GLvoid*)(3 * sizeof(GLfloat)));
 	glEnableVertexAttribArray(1);
 	glBindVertexArray(0);
 	GLuint lineVBO, lineVAO;
-	GLuint lineVBOduplicated, lineVAOduplicated;
-	generateLines(lineVAO, lineVBO, lineVBOduplicated, lineVAOduplicated);
 
-	GLfloat rectangleVertices[] =
-	{
-		// Ret‚ngulo vermelho movido 0,01 para cima, 0,01 para a direita e mais 0,01 para a direita
-		0.114f, -0.015f, -0.01f,  1.0f, 1.0f, 0.0f, 1.0f,
-		0.255f, 0.127f, -0.01f,  1.0f, 1.0f, 0.0f, 1.0f,
-		0.184f, 0.198f, -0.01f,  1.0f, 1.0f, 0.0f, 1.0f,
-		0.043f, 0.056f, -0.01f,  1.0f, 1.0f, 0.0f, 1.0f,
+	Rectangle rectangle = initRectangle();
 
-		// Ret‚ngulo verde movido 0,02 para a esquerda, 0,01 para cima, 0,001 para a esquerda e mais 0,01 para a esquerda
-		-0.254f, 0.127f, 0.0f,  1.0f, 1.0f, 0.0f, 1.0f,
-		-0.114f, -0.014f, 0.0f,  1.0f, 1.0f, 0.0f, 1.0f,
-		-0.044f, 0.056f, 0.0f,   1.0f, 1.0f, 0.0f, 1.0f,
-		-0.184f, 0.197f, 0.0f,  1.0f, 1.0f, 0.0f, 1.0f,
-
-		// Ret‚ngulo 3 azul
-		-0.05f, 0.06f, 0.0f,  1.0f, 1.0f, 0.0f, 1.0f,
-		0.05f, 0.06f, 0.0f,  1.0f, 1.0f, 0.0f, 1.0f,
-		0.05f, 0.26f, 0.0f,  1.0f, 1.0f, 0.0f, 1.0f,
-		-0.05f, 0.26f, 0.0f,  1.0f, 1.0f, 0.0f, 1.0f,
-
-		// Ret‚ngulo 4 amarelo rotacionado, movido 0,01 para cima, 0,01 para a direita e 0,02 para a esquerda
-		0.156f, -0.226f, 0.0f,  1.0f, 1.0f, 0.0f, 1.0f,
-		0.014f, -0.084f, 0.0f,  1.0f, 1.0f, 0.0f, 1.0f,
-		0.084f, -0.014f, 0.0f,  1.0f, 1.0f, 0.0f, 1.0f,
-		0.226f, -0.156f, 0.0f,  1.0f, 1.0f, 0.0f, 1.0f,
-
-		// Ret‚ngulo 5 roxo movido 0,01 para cima
-		-0.212f, -0.155f, 0.0f,  1.0f, 1.0f, 0.0f, 1.0f,
-		-0.07f, -0.013f, 0.0f,   1.0f, 1.0f, 0.0f, 1.0f,
-		0.001f, -0.083f, 0.0f,   1.0f, 1.0f, 0.0f, 1.0f,
-		-0.141f, -0.225f, 0.0f,  1.0f, 1.0f, 0.0f, 1.0f,
-	};
-
-
-	GLuint rectangleIndices[] = {
-		// Ret‚ngulo 1
-		0, 1, 2, 2, 3, 0,
-		// Ret‚ngulo 2
-		4, 5, 6, 6, 7, 4,
-		// Ret‚ngulo 3
-		8, 9, 10, 10, 11, 8,
-		// Ret‚ngulo 4
-		12, 13, 14, 14, 15, 12,
-		// Ret‚ngulo 5
-		16, 17, 18, 18, 19, 16,
-	};
-
-	GLuint rectangleVBO, rectangleVAO, rectangleEBO;
-	glGenVertexArrays(1, &rectangleVAO);
-	glGenBuffers(1, &rectangleVBO);
-	glGenBuffers(1, &rectangleEBO);
-	glBindVertexArray(rectangleVAO);
-	glBindBuffer(GL_ARRAY_BUFFER, rectangleVBO);
-	glBufferData(GL_ARRAY_BUFFER, sizeof(rectangleVertices), rectangleVertices, GL_STATIC_DRAW);
-	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, rectangleEBO);
-	glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(rectangleIndices), rectangleIndices, GL_STATIC_DRAW);
-	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 7 * sizeof(GLfloat), (GLvoid*)0);
-	glEnableVertexAttribArray(0);
-	glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, 7 * sizeof(GLfloat), (GLvoid*)(3 * sizeof(GLfloat)));
-	glEnableVertexAttribArray(1);
-	glBindVertexArray(0);
 
 	GLfloat fator_escala = 0.5f;
 
@@ -333,8 +251,6 @@ int main(void)
 
 	glBindVertexArray(0); // Desvincular o VAO
 
-
-
 	GLuint vs = glCreateShader(GL_VERTEX_SHADER);
 	glShaderSource(vs, 1, &vertexShaderSrc, NULL);
 	glCompileShader(vs);
@@ -361,7 +277,7 @@ int main(void)
 	glEnable(GL_BLEND);
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-	float rightRotationAngle = 90.0f;
+	float rightRotationAngle = 270.0f;
 	float leftRotationAngle = 270.0f;
 	float translationSpeed = 0.1f;
 	float rotationDuration = 5.0f;
@@ -406,154 +322,99 @@ int main(void)
 	bool displayingInvertedTriangle = false;
 	float displayStartTime = 0.0f;
 	int jumpCount = 0;
+	Transformation transformation;
+	UniformLocation uniform;
 
+	//float timer[] = {-1, -1};
+	float phaseTimer[4] = { -1.0f, -1.0f, -1.0f, -1.0f };
 	while (!glfwWindowShouldClose(gWindow))
 	{
 		float currentTime = glfwGetTime();
 		float elapsedTime = currentTime - startTime;
-		glm::mat4 model = glm::mat4(1.0f);
+		std::cout << "Tempo decorrido: " << elapsedTime << std::endl;
+		glm::mat4 model = transformation.model = glm::mat4(1.0f);
 
 		// Configura a projeÁ„o e a visualizaÁ„o
 		int width, height;
 		glfwGetFramebufferSize(gWindow, &width, &height);
-		glm::mat4 projection = glm::ortho(-1.0f, 1.0f, -1.0f * (float)height / width, 1.0f * (float)height / width, -1.0f, 1.0f);
-		glm::mat4 view = glm::mat4(1.0f);
+		transformation.projection = glm::ortho(-1.0f, 1.0f, -1.0f * (float)height / width, 1.0f * (float)height / width, -1.0f, 1.0f);
+		transformation.view = glm::mat4(1.0f);
 
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 		glUseProgram(shaderProgram);
-		GLint projLoc = glGetUniformLocation(shaderProgram, "projection");
-		GLint viewLoc = glGetUniformLocation(shaderProgram, "view");
-		GLint modelLoc = glGetUniformLocation(shaderProgram, "model");
 
-		if (projLoc == -1 || viewLoc == -1 || modelLoc == -1)
+		uniform.projLoc = glGetUniformLocation(shaderProgram, "projection");
+		uniform.viewLoc = glGetUniformLocation(shaderProgram, "view");
+		uniform.modelLoc = glGetUniformLocation(shaderProgram, "model");
+
+		if (uniform.projLoc == -1 || uniform.viewLoc == -1 || uniform.modelLoc == -1)
 		{
 			std::cerr << "Uniform Location Error" << std::endl;
 		}
 
 		// AnimaÁ„o de pulo
-		JumpStar(jumping, elapsedTime, jumpDuration, numJumps, startTime, currentTime, jumpHeight, model);
 
-		DrawRotatingStar(finishedRotation, elapsedTime, rotationDuration, rotatingForward, rightRotationAngle, leftRotationAngle, startTime, currentTime, currentLineIndex, jumping, translationSpeed, model);
+		drawJumpingStar(star, uniform, transformation, phaseTimer);
+		drawRotatingStar(star, uniform, transformation, phaseTimer);
 		DisplayInvertedTriangle(finishedRotation, displayingInvertedTriangle, displayStartTime, currentTime);
 
-		if (!drawingTriangle && !displayingInvertedTriangle)
+		if (!star.control.rotationControl.isRotating)
 		{
-			// Desenha o pentagrama e as linhas
-			DrawStar(modelLoc, model, projLoc, projection, viewLoc, view, vao, ebo);
-
-			if (!rotatingForward)
-			{
-				DrawRedLines(modelLoc, lineVAO, currentLineIndex);
-			}
+			drawLines(lines, uniform);
 		}
-		else if (displayingInvertedTriangle)
-		{
-			if (currentTime - displayStartTime < 3.0f)
-			{
-				// Desenha o tri‚ngulo e o quadrado por 3 segundos
-				DrawInvertedTriangle(modelLoc, projLoc, projection, viewLoc, view, invertedTriangleVAO, squareVAO);
-			}
-			else if (jumpCount < 3)
-			{
-				if (!jumping)
-				{
-					// Inicia um novo pulo
-					jumping = true;
-					startTime = currentTime;
-					jumpCount++;  // Incrementa o contador de pulos
-				}
 
-				// Calcula o tempo decorrido do pulo
-				float jumpElapsedTime = currentTime - startTime;
-				float jumpFraction = jumpElapsedTime / (jumpDuration / 2);
-				if (jumpFraction > 1.0f) jumpFraction = 2.0f - jumpFraction;
-				float currentJumpHeight = jumpHeight * jumpFraction;
+		//else if (displayingInvertedTriangle)
+		//{
+		//	if (currentTime - displayStartTime < 3.0f)
+		//	{
+		//		// Desenha o tri‚ngulo e o quadrado por 3 segundos
+		DrawInvertedTriangle(uniform, transformation, triangle.vao, square.vao);
+		//	}
+		//	else if (star.control.jumpControl.currentJump < 3)
+		//	{
+		//		if (!star.control.jumpControl.jumping)
+		//		{
+		//			// Inicia um novo pulo
+		//			jumping = true;
+		//			//star.control.timeControl.startTime = currentTime;
+		//			jumpCount++;  // Incrementa o contador de pulos
+		//		}
 
-				// Atualiza a matriz de modelo para refletir a altura do pulo
-				glm::mat4 modelJump = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, currentJumpHeight, 0.0f));
+		//		// Calcula o tempo decorrido do pulo
+		//		float jumpElapsedTime = currentTime - startTime;
+		//		float jumpFraction = jumpElapsedTime / (jumpDuration / 2);
+		//		if (jumpFraction > 1.0f) jumpFraction = 2.0f - jumpFraction;
+		//		float currentJumpHeight = jumpHeight * jumpFraction;
 
-				DrawStar(modelLoc, modelJump, projLoc, projection, viewLoc, view, vao, ebo);
+		//		// Atualiza a matriz de modelo para refletir a altura do pulo
+		//		glm::mat4 modelJump = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, currentJumpHeight, 0.0f));
 
-				// Verifica se o pulo terminou
-				if (jumpElapsedTime > jumpDuration)
-				{
-					jumping = false;
-				}
-			}
+		//		drawJumpingStar(star, uniform, transformation, phaseTimer);
 
-			else
-			{
-				// Desenha a estrela
-				DrawStar(modelLoc, model, projLoc, projection, viewLoc, view, vao, ebo);
-				// Desenha os 5 ret‚ngulos
-				DrawRectangles(modelLoc, model, projLoc, projection, viewLoc, view, rectangleVAO);
-			}
-			//DrawHexagon(modelLoc, model, projLoc, projection, viewLoc, view, hexagonVAO, hexagonEBO);
-		}
+		//		// Verifica se o pulo terminou
+		//		if (jumpElapsedTime > jumpDuration)
+		//		{
+		//			jumping = false;
+		//		}
+		//	}
+		//	else
+		//	{
+		//		//DrawStar(uniform, transformation, star);
+		//		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+		//		std::cout << "Desenhando estrela" << std::endl;
+		//		//drawRectangle(rectangle, uniform, transformation);
+		//	}
+		//	//DrawHexagon(modelLoc, model, projLoc, projection, viewLoc, view, hexagonVAO, hexagonEBO);
+		//}
 		glfwSwapBuffers(gWindow);
 		glfwPollEvents();
 	}
 
-	clear(vao, vbo, ebo, lineVAO, lineVBO, shaderProgram);
+	clear(star.vao, star.vbo, star.ebo, lineVAO, lineVBO, shaderProgram);
 	glfwDestroyWindow(gWindow);
 	glfwTerminate();
 	return 0;
-}
-
-void generateLines(GLuint& lineVAO, GLuint& lineVBO, GLuint& lineVAOduplicated, GLuint& liveVBOduplicated)
-{
-	std::vector<GLfloat> lineData{};
-
-	GLfloat lineVertices1[] = {
-		-0.22f, -0.2f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f,  // Linha 1: Base
-		-0.22f, -0.15615f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f, // Linha 1: Extrema superior
-
-		-0.22f, -0.2f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f,  // Linha 1-duplicated: Base
-		-0.22f, -0.15615f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f, // Linha 1-duplicated: Extrema superior
-
-		-0.02f, -0.2f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f,  // Linha 2: Base
-		-0.02f, -0.1125f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f, // Linha 2: Extrema superior
-		
-		-0.02f, -0.2f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f,  // Linha 2-duplicated: Base
-		-0.02f, -0.1125f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f, // Linha 2-duplicated: Extrema superior
-
-		0.25f, -0.2f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f,  // Linha 3: Base
-		0.25f, -0.024f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f, // Linha 3: Extrema superior
-
-		0.25f, -0.2f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f,  // Linha 3-duplicated: Base
-		0.25f, -0.024f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f, // Linha 3-duplicated: Extrema superior
-
-		0.50f, -0.2f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f,  // Linha 4: Base
-		0.50f, 0.1f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f,   // Linha 4: Extrema 
-	};
-	
-
-	for (int i = 0; i < sizeof(lineVertices1) / sizeof(GLfloat); i+=7) {
-		lineData.push_back(lineVertices1[i]); 
-		lineData.push_back(lineVertices1[i+1]); 
-		lineData.push_back(lineVertices1[i+2]); 
-		lineData.push_back(lineVertices1[i+3]); 		
-		lineData.push_back(lineVertices1[i+4]); 
-		lineData.push_back(lineVertices1[i+5]); 
-		lineData.push_back(lineVertices1[i+6]); 
-
-		lines.lines.push_back({
-			glm::vec3(lineVertices1[i], lineVertices1[i+1], lineVertices1[i+2]),
-			glm::vec4(lineVertices1[i+3], lineVertices1[i+4], lineVertices1[i+5], lineVertices1[i+6])
-		});
-	}
-
-	glGenVertexArrays(1, &lineVAO);
-	glBindVertexArray(lineVAO);
-	glGenBuffers(1, &lineVBO);
-	glBindBuffer(GL_ARRAY_BUFFER, lineVBO);
-	glBufferData(GL_ARRAY_BUFFER, lineData.size() * sizeof(GLfloat), lineData.data(), GL_DYNAMIC_DRAW);
-	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 7 * sizeof(GLfloat), (GLvoid*)0);
-	glEnableVertexAttribArray(0);
-	glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, 7 * sizeof(GLfloat), (GLvoid*)(3 * sizeof(GLfloat)));
-	glEnableVertexAttribArray(1);
-	glBindVertexArray(0);
 }
 
 void DisplayInvertedTriangle(bool finishedRotation, bool& displayingInvertedTriangle, float& displayStartTime, float currentTime)
@@ -569,88 +430,6 @@ void DisplayInvertedTriangle(bool finishedRotation, bool& displayingInvertedTria
 	}
 }
 
-void DrawRotatingStar(bool& finishedRotation, float elapsedTime, float rotationDuration, bool& rotatingForward, float rightRotationAngle, float leftRotationAngle, float& startTime, float currentTime, int currentLineIndex, bool& jumping, float translationSpeed, glm::mat4& model)
-{
-	if (jumping) return;
-
-	if (!finishedRotation)
-	{
-		// Anima√ß√£o de rota√ß√£o e transla√ß√£o
-		float rotationFraction = fmin(elapsedTime / rotationDuration, 1.0f);
-		float currentRotationAngle = (rotatingForward ? rightRotationAngle : leftRotationAngle) * rotationFraction;
-
-		if (rotatingForward)
-		{
-			if (currentRotationAngle >= rightRotationAngle)
-			{
-				rotatingForward = false; // Muda para rota√ß√£o para tr√°s
-				startTime = currentTime; // Reinicia o tempo para a rota√ß√£o para tr√°s
-			}
-		}
-		else
-		{
-			if (currentRotationAngle >= leftRotationAngle)
-			{
-				rotatingForward = true;
-				startTime = currentTime; // Reinicia o tempo para a rota√ß√£o para frente
-
-				if (currentLineIndex >= 3)
-				{
-					finishedRotation = true;
-					jumping = true;  // Faz a estrela pular novamente no final
-					startTime = currentTime; // Reinicia o tempo para o pulo final
-				}
-			}
-		}
-
-		float translation = translationSpeed * elapsedTime;
-
-		float backTranslation = translationSpeed * (elapsedTime - rotationDuration); // Transla√ß√£o de volta
-		glm::mat4 translationMatrix = glm::translate(glm::mat4(1.0f), glm::vec3(translation, 0.0f, 0.0f));
-
-		glm::mat4 rotationMatrix;
-
-		RotateStar(rotatingForward, rotationMatrix, currentRotationAngle, translationMatrix, backTranslation);
-
-		model = translationMatrix * rotationMatrix;
-
-	}
-}
-
-void JumpStar(bool& jumping, float elapsedTime, float jumpDuration, int numJumps, float& startTime, float currentTime, float jumpHeight, glm::mat4& model)
-{
-	if (jumping)
-	{
-		int currentJump = static_cast<int>(elapsedTime / jumpDuration);
-		if (currentJump >= numJumps)
-		{
-			jumping = false;
-			startTime = currentTime; // Reinicia o tempo para a rota√ß√£o
-		}
-		else
-		{
-			float jumpElapsedTime = elapsedTime - currentJump * jumpDuration;
-			float jumpFraction = jumpElapsedTime / (jumpDuration / 2);
-			if (jumpFraction > 1.0f) jumpFraction = 2.0f - jumpFraction;
-			float currentJumpHeight = jumpHeight * jumpFraction;
-			model = glm::translate(model, glm::vec3(0.0f, currentJumpHeight, 0.0f));
-		}
-	}
-}
-
-void RotateStar(bool rotatingForward, glm::mat4& rotationMatrix, float currentRotationAngle, glm::mat4& translationMatrix, float backTranslation)
-{
-	if (rotatingForward)
-	{
-		rotationMatrix = glm::rotate(glm::mat4(1.0f), glm::radians(-currentRotationAngle), glm::vec3(0.0f, 0.0f, 1.0f));
-	}
-	else
-	{
-		rotationMatrix = glm::rotate(glm::mat4(1.0f), glm::radians(currentRotationAngle), glm::vec3(0.0f, 0.0f, 1.0f));
-		translationMatrix = glm::translate(glm::mat4(1.0f), glm::vec3(-backTranslation, 0.0f, 0.0f));
-	}
-}
-
 void clear(GLuint& vao, GLuint& vbo, GLuint& ebo, GLuint& lineVAO, GLuint& lineVBO, GLuint shaderProgram)
 {
 	glDeleteVertexArrays(1, &vao);
@@ -659,17 +438,6 @@ void clear(GLuint& vao, GLuint& vbo, GLuint& ebo, GLuint& lineVAO, GLuint& lineV
 	glDeleteVertexArrays(1, &lineVAO);
 	glDeleteBuffers(1, &lineVBO);
 	glDeleteProgram(shaderProgram);
-}
-
-void DrawRedLines(GLint modelLoc, GLuint lineVAO, int currentLineIndex)
-{
-	float offsetX = -0.2f;
-	glm::mat4 lineModel = glm::translate(glm::mat4(1.0f), glm::vec3(offsetX, 0.0f, 0.0f));
-	glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(lineModel));
-
-	glBindVertexArray(lineVAO);
-	glDrawArrays(GL_LINES, 0, 14);
-	glBindVertexArray(0);
 }
 
 void DrawInvertedTriangle(GLint modelLoc, GLint projLoc, glm::mat4& projection, GLint viewLoc, glm::mat4& view, GLuint invertedTriangleVAO, GLuint squareVAO)
@@ -687,17 +455,34 @@ void DrawInvertedTriangle(GLint modelLoc, GLint projLoc, glm::mat4& projection, 
 	glBindVertexArray(0);
 }
 
-void DrawStar(GLint modelLoc, glm::mat4& model, GLint projLoc, glm::mat4& projection, GLint viewLoc, glm::mat4& view, GLuint vao, GLuint ebo)
+void DrawInvertedTriangle(UniformLocation uniform, Transformation transformation, GLuint invertedTriangleVAO, GLuint squareVAO)
 {
-	glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(model));
-	glUniformMatrix4fv(projLoc, 1, GL_FALSE, glm::value_ptr(projection));
-	glUniformMatrix4fv(viewLoc, 1, GL_FALSE, glm::value_ptr(view));
+	glUniformMatrix4fv(uniform.modelLoc, 1, GL_FALSE, glm::value_ptr(glm::mat4(1.0f)));
+	glUniformMatrix4fv(uniform.projLoc, 1, GL_FALSE, glm::value_ptr(transformation.projection));
+	glUniformMatrix4fv(uniform.viewLoc, 1, GL_FALSE, glm::value_ptr(transformation.view));
 
-	glBindVertexArray(vao);
-	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
+	glBindVertexArray(invertedTriangleVAO);
+	glDrawArrays(GL_TRIANGLES, 0, 3);
+	glBindVertexArray(0);
+
+	glBindVertexArray(squareVAO);
+	glDrawElements(GL_LINES, 8, GL_UNSIGNED_INT, 0);
+	glBindVertexArray(0);
+}
+
+
+
+void DrawStar(UniformLocation uniform, Transformation transformation, Star star)
+{
+	//getUniformMatrixes(uniform, transformation);
+	glBindVertexArray(star.vao);
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, star.ebo);
 	glDrawElements(GL_LINES, 10, GL_UNSIGNED_INT, 0);
 	glBindVertexArray(0);
 }
+
+
+
 
 void DrawRectangles(GLint modelLoc, glm::mat4& model, GLint projLoc, glm::mat4& projection, GLint viewLoc, glm::mat4& view, GLuint rectangleVAO)
 {
@@ -710,6 +495,14 @@ void DrawRectangles(GLint modelLoc, glm::mat4& model, GLint projLoc, glm::mat4& 
 	glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(model));
 	glDrawElements(GL_TRIANGLES, 30, GL_UNSIGNED_INT, 0);
 
+	glBindVertexArray(0);
+}
+
+void DrawRectangles(UniformLocation uniform, Transformation transformation, Rectangle rectangle)
+{
+	//getUniformMatrixes(uniform, transformation);
+	glBindVertexArray(rectangle.vao);
+	glDrawElements(GL_TRIANGLES, 30, GL_UNSIGNED_INT, 0);
 	glBindVertexArray(0);
 }
 
